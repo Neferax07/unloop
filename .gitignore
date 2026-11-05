@@ -2,3 +2,5 @@
 Cargo.lock
 PLAN.md
 assets/LOGO-PROMPTS.md
+.v2c/
+.video_agent/
