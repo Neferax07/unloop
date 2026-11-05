@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Neferax
+
 //! unloop bench: per-token review cost, worst case (active loop continuation →
 //! both detectors active + full logits pass) and healthy path. The timed region
 //! is `review()` ONLY — the pristine-logits restore happens outside timing, so

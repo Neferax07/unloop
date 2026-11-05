@@ -16,6 +16,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: tests (scalar fallback correctness on all platforms)
         run: cargo test --release
+      - name: cli selftest
+        run: cargo run --release --bin unloop -- selftest
       - name: ffi feature build
         run: cargo build --release --features ffi
       - name: package dry-run

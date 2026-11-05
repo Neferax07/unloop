@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Neferax
+
 //! # unloop — weight-free repetition governor for LLM decoding
 //!
 //! Zero dependencies, `no_std`, ~200 lines. Detects degenerate continuation loops

@@ -1,135 +1,155 @@
 # unloop
 
-**Kill LLM repetition loops with a 200-line, weight-free governor — deterministic, replayable, mountable anywhere.**
+Repetition-loop governor for greedy LLM decoding. Detects the continuation token of a
+loop in the token history, demotes that single logit below the runner-up, schedules
+escalation on an affine state machine over Z9. No weights, no training, no
+dependencies.
 
-No model. No training. No dependencies. Detects degenerate continuation loops
-*structurally* in the emitted token history, then applies the **minimal intervention**
-that flips the greedy choice: demote exactly one logit to just below the runner-up.
-
-```toml
-[dependencies]
-unloop = "0.1"
+```sh
+cargo add unloop
 ```
 
----
+## CLI
 
-## The problem
+```
+unloop replay --history <file> --logits <file> [--preset P] [--prompt S] [--json]
+unloop bench
+unloop selftest
+```
 
-Likelihood-maximizing decoding degenerates into repetition loops
-([Holtzman et al., ICLR 2020](https://arxiv.org/abs/1904.09751)). The standard fix —
-additive repetition penalty (CTRL, [Keskar et al. 2019](https://arxiv.org/abs/1909.05858)) —
-distorts probability mass on **every** decoding step, even healthy ones, and as this
-crate's harness proves, it can **flash** a fix and then **relapse**.
+Fixture formats:
 
-## The Relapse Proof Table
+- `history`: u32 little-endian token ids, one per step
+- `logits`: f32 little-endian frames, one frame per step; `vocab = file_len / (4 * steps)`
 
-Deterministic degenerate decoder (vocab 8), attractor opens at step 20, 64-step
-generations, xorshift noise seed 42 — every number reproducible from
-`cargo test --release -- --nocapture`:
+`replay` prints the intervention schedule: step, verdict, phase, damp and kick
+counters. `--json` emits the same trace as JSON.
 
-| config | loop in tail? | tokens-to-break | cumulative L1 damage |
-|---|---|---|---|
-| greedy | **yes** | ∞ | 0.00 |
-| repetition penalty θ=1.2 | **yes** | ∞ | 17.90 |
-| repetition penalty θ=1.5 | **yes — relapses** | 1 | 25.45 |
-| **unloop (balanced)** | **no — holds** | 9 | **6.70** |
-
-Two structural findings the harness proves:
-
-1. **θ=1.2 cannot break a loop whose runner-up was already emitted** — dividing both
-   logits by the same θ preserves their order. Mathematically impotent there.
-2. **θ=1.5 escapes for exactly one token, then relapses**: the escape token enters the
-   history, gets punished too, and the attractor wins it back. The penalty cannot
-   *hold* a fix — only flash one. unloop's demotion holds: the escape route is never
-   penalized, and each re-formed loop gets damped again.
-
-On healthy runs unloop is **provably silent** (zero logits touched, L1 damage < 1e-9,
-CI-asserted) while the always-on penalty measurably distorts every step
-(`healthy_generation_untouched`).
-
-## The mechanism
-
-1. **Detect before intervening** — two structural detectors on the token history:
-   exact-period detection (p ≤ 16, bounded suffix match) and non-adjacent echo
-   detection (bounded window). A step is degenerate only when a repetition exists
-   **and** the model's top choice is exactly the continuation.
-2. **Minimal intervention** — lower the continuation logit to `runner-up − margin`.
-   One logit written; every other logit is byte-untouched (CI-enforced invariant).
-3. **Deterministic Finite-Ring Phase Governor** — escalation (damp → damp → damp →
-   kick → … → halt) runs on an affine state machine over ℤ₉:
-   - `phase = (phase * 5 + 5) mod 9` on damp (order 6),
-   - `phase = (phase * 7 + 7) mod 9` on kick (order 9 — full period by the
-     [Hull–Dobell theorem](https://en.wikipedia.org/wiki/Linear_congruential_generator),
-     so successive kicks cycle all 9 states before repeating),
-   - seeded from the prompt's Hamming-weight density class; kick temperature scales
-     with the live phase.
-
-   Same prompt + same history ⇒ the same schedule, byte-exact. No sampling-based
-   heuristic can offer this.
-
-## Performance
-
-Hot path, single thread, i7-13620H (10C/16T), Windows, `target-cpu=native`
-(reproducible: `cargo run --release --example bench`):
-
-| path | before | after | directive |
-|---|---|---|---|
-| review — worst case (active loop, 16k vocab, 512-token history) | 27,127 ns | **3,300 ns** | < 3,500 ✓ |
-| review — healthy step (no continuation, 0 logits touched) | 7,459 ns | **200 ns** | < 500 ✓ |
-
-The logits pass is one linear AVX2 reduction (`vmaxps`/`vminps` per-lane top-2
-accumulators — 2 vector ops per 8 logits, NaN-detected in-register, no scratch
-buffer, no materialization). Portable builds fall back to the exact scalar path
-(CI proves both paths pass the full suite). **0 allocations on every path**
-(CI-enforced by a counting allocator in `tests/no_alloc.rs`). Build with
-`RUSTFLAGS="-C target-cpu=native"` to enable the SIMD path on your machine —
-without it everything is correct, just slower. The forward pass of a
-0.5B-parameter model is 1–10 ms — review overhead is noise; correctness is the
-product.
-
-## Mount anywhere
-
-Rust:
+## Library
 
 ```rust
 use unloop::{profile, Governor, Preset, Step};
 
-let profile = profile(prompt_bytes);            // once per prompt
-let mut gov = Governor::new(Preset::for_profile(&profile), &profile);
+let prof = profile(prompt_bytes);            // once per prompt
+let mut gov = Governor::new(Preset::for_profile(&prof), &prof);
 loop {
-    let step = gov.review(&history, &mut logits); // per token
+    let step = gov.review(&history, &mut logits);  // per token, in place
     match step {
-        Step::Pass | Step::Damp => sample(&mut logits, temperature),
-        Step::Kick(t)           => sample(&mut logits, t),
+        Step::Pass | Step::Damp => { /* sample at your temperature */ }
+        Step::Kick(t)           => { /* sample at t */ }
         Step::Stop              => break,
     }
 }
 ```
 
-C ABI (feature `ffi`):
+`review` takes the full token history and the current logits frame; it writes at most
+one logit. `Governor` is `Copy`, state under 64 bytes, no per-token allocation.
+
+## C ABI
+
+Feature `ffi`:
 
 ```c
-unloop* g = unloop_new(1, density_class, lane);
-uint8_t step = unloop_review(g, history, hlen, logits, n, &kick_temp);
+unloop*  unloop_new(uint8_t preset, uint8_t density_class, uint8_t lane);
+uint8_t  unloop_review(unloop* g, const uint32_t* history, uint32_t hlen,
+                       float* logits, uint32_t n, float* kick_temp);
+void     unloop_free(unloop* g);
 ```
 
-Determinism receipts: `Governor::phase()` and `Governor::counters()` expose the
-governor state for replay verification.
+Step tags: 0 pass, 1 damp, 2 kick (temperature written to `kick_temp`), 3 stop.
 
-## What this is not
+## State machine
 
-- Not a replacement for nucleus/temperature sampling — orthogonal; mounts beside it.
-- Not a claim to eliminate all repetition — it flips greedy continuation loops with
-  minimal mass movement, deterministically, and halts when budgets exhaust.
-- Not trained, not tuned per model — three presets, one documented policy table.
+Presets (`src/lib.rs`, `Policy::of`):
+
+| preset  | patience | max_damps | max_kicks | margin | kick_T | min_span | echo_len | window |
+|---------|----------|-----------|-----------|--------|--------|----------|----------|--------|
+| loose   | 4        | 64        | 16        | 0.25   | 0.9    | 12       | 8        | 256    |
+| balanced| 3        | 32        | 8         | 0.5    | 1.0    | 8        | 6        | 192    |
+| tight   | 2        | 16        | 4         | 1.0    | 1.1    | 6        | 5        | 160    |
+
+Per-token decision (`Governor::review`):
+
+1. `loop_period`: smallest p ≤ 16 such that the history tail repeats with period p
+   over ≥ 2 full periods and `matched + p ≥ min_span`.
+2. `echo_continuation`: last `echo_len` tokens recur earlier within `window` tokens;
+   continuation is the token that followed the earlier occurrence.
+3. Degenerate only when a continuation exists and the logits argmax equals it.
+4. Period-2 (ABAB) waits for 2 consecutive swings, then damps. Longer periods:
+   `patience` passes, then up to 3 damps, then a kick. Budgets exceeded → `Stop`.
+5. Demotion: `logits[top] = min(logits[top], logits[runner_up] - margin)`. No other
+   logit is written.
+
+Phase governor, seeded `phase = (density_class + lane_factor) % 9`, lane factor 3
+(prose) / 6 (dense); `density_class` is the prompt's set-bit count folded to 1..=9:
+
+```
+damp: phase = (phase * 5 + 5) % 9   // order 6
+kick: phase = (phase * 7 + 7) % 9   // order 9, full period (Hull-Dobell: gcd(7,9)=1,
+                                    // 6 ≡ 0 mod 3, 4 ∤ 9)
+kick temperature = kick_T * (1 + phase / 18)
+```
+
+Prompt lane: dense when Shannon entropy > 6 bits/byte, or printable share < 0.85, or
+digit share ≥ 0.5; else prose. Preset from lane: prose → balanced, dense → tight.
+
+Full algebra: [docs/STATE-MACHINE.md](docs/STATE-MACHINE.md).
+
+## Measured
+
+i7-13620H, 10C/16T, Windows 11 26300, `target-cpu=native`, median of 20,000 steps,
+timed region is `review` only:
+
+| path | ns/step |
+|---|---|
+| active loop (16k vocab, 512-token history, both detectors + logits pass) | 2,600–3,300 |
+| healthy (no continuation, 0 logits touched) | 100–200 |
+
+Reproduce: `cargo run --release --bin unloop -- bench`. Portable builds without
+`target-cpu=native` run the exact scalar path, slower.
+
+Reference head-to-head (deterministic 8-token-vocab mock, attractor from step 20,
+64 steps, seed 42; reproducible via `cargo test --release -- --nocapture`):
+
+| config | loop in tail | tokens to break | cumulative L1 damage |
+|---|---|---|---|
+| greedy | yes | — | 0 |
+| repetition penalty θ=1.2 | yes | — | 17.90 |
+| repetition penalty θ=1.5 | yes, relapses after 1 token | 1 | 25.45 |
+| unloop (balanced) | no | 9 | 6.70 |
+
+θ=1.2 cannot break a loop whose runner-up is already in the history: dividing both
+logits by the same θ preserves their order. θ=1.5 escapes once, the escape token
+enters the history, is penalized too, and the attractor wins the step back. unloop
+holds: the escape route is not penalized, and each re-formed loop is damped again.
+
+## Correctness gates (CI-enforced)
+
+- only the continuation logit is written; every other logit is byte-identical
+- 0 allocations per token, counting allocator over mount + healthy + intervention runs
+- schedule replays byte-exact from (preset, prompt profile)
+- fast top-two path equals the sequential reference over 4,000 adversarial cases
+  (duplicate maxima, ±0, ±inf, sorted, reversed, random)
+- SHA-256 free; no network; no I/O in the library path
+
+## Files
+
+```
+src/lib.rs    core (no_std): detectors, governor, phase ring
+src/main.rs   CLI: replay, bench, selftest
+src/ffi.rs    C ABI (feature "ffi")
+docs/STATE-MACHINE.md   full transition table and algebra
+tests/        behavior, fuzz-equality, allocation proofs
+```
 
 ## Prior art
 
-- [The Curious Case of Neural Text Degeneration](https://arxiv.org/abs/1904.09751) —
-  Holtzman et al., ICLR 2020 (degeneration + nucleus sampling)
-- [CTRL: repetition penalty](https://arxiv.org/abs/1909.05858) — Keskar et al. 2019
-- [Penalty decoding / self-reinforcement](https://arxiv.org/pdf/2310.14971) — Zhu et al. 2023
-- [LZ Penalty](https://arxiv.org/html/2504.20131v2) — 2025 (closest active competitor)
-- [Towards Understanding Neural Text Degeneration](https://arxiv.org/html/2310.10226v1) — 2023
+- Holtzman et al., The Curious Case of Neural Text Degeneration, ICLR 2020.
+  https://arxiv.org/abs/1904.09751
+- Keskar et al., CTRL: repetition penalty, 2019. https://arxiv.org/abs/1909.05858
+- Zhu et al., Penalty decoding / self-reinforcement, 2023. https://arxiv.org/pdf/2310.14971
+- LZ Penalty, 2025. https://arxiv.org/html/2504.20131v2
 
-MIT OR Apache-2.0. Zero dependencies. `no_std` core.
+## License
+
+MIT OR Apache-2.0.

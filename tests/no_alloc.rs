@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Neferax
+
 //! Allocation proof: the README claims "0 allocations on every path" — this
 //! test makes that claim CI-enforced instead of asserted. Counting allocator
 //! around healthy (Pass) and intervention (Damp/Kick) reviews plus mounts.

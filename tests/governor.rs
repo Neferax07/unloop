@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Neferax
+
 //! Head-to-head harness: unloop vs standard repetition penalty (CTRL-style) on
 //! a deterministic degenerate-decoder mock. Every assertion is exact; every
 //! metric is printed for the README table.
