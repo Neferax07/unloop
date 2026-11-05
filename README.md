@@ -1,9 +1,6 @@
-# unloop
+﻿# unloop
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/mark-dark.svg">
-  <img src="assets/mark.svg" alt="unloop mark: nine-state ring, top node filled" width="120">
-</picture>
+<p align="center"><img src="assets/preview.png" alt="unloop" width="520"></p>
 
 Repetition-loop governor for greedy LLM decoding. Detects the continuation token of a
 loop in the token history, demotes that single logit below the runner-up, schedules
@@ -75,13 +72,13 @@ Presets (`src/lib.rs`, `Policy::of`):
 
 Per-token decision (`Governor::review`):
 
-1. `loop_period`: smallest p ≤ 16 such that the history tail repeats with period p
-   over ≥ 2 full periods and `matched + p ≥ min_span`.
+1. `loop_period`: smallest p â‰¤ 16 such that the history tail repeats with period p
+   over â‰¥ 2 full periods and `matched + p â‰¥ min_span`.
 2. `echo_continuation`: last `echo_len` tokens recur earlier within `window` tokens;
    continuation is the token that followed the earlier occurrence.
 3. Degenerate only when a continuation exists and the logits argmax equals it.
 4. Period-2 (ABAB) waits for 2 consecutive swings, then damps. Longer periods:
-   `patience` passes, then up to 3 damps, then a kick. Budgets exceeded → `Stop`.
+   `patience` passes, then up to 3 damps, then a kick. Budgets exceeded â†’ `Stop`.
 5. Demotion: `logits[top] = min(logits[top], logits[runner_up] - margin)`. No other
    logit is written.
 
@@ -91,12 +88,12 @@ Phase governor, seeded `phase = (density_class + lane_factor) % 9`, lane factor 
 ```
 damp: phase = (phase * 5 + 5) % 9   // order 6
 kick: phase = (phase * 7 + 7) % 9   // order 9, full period (Hull-Dobell: gcd(7,9)=1,
-                                    // 6 ≡ 0 mod 3, 4 ∤ 9)
+                                    // 6 â‰¡ 0 mod 3, 4 âˆ¤ 9)
 kick temperature = kick_T * (1 + phase / 18)
 ```
 
 Prompt lane: dense when Shannon entropy > 6 bits/byte, or printable share < 0.85, or
-digit share ≥ 0.5; else prose. Preset from lane: prose → balanced, dense → tight.
+digit share â‰¥ 0.5; else prose. Preset from lane: prose â†’ balanced, dense â†’ tight.
 
 Full algebra: [docs/STATE-MACHINE.md](docs/STATE-MACHINE.md).
 
@@ -107,8 +104,8 @@ timed region is `review` only:
 
 | path | ns/step |
 |---|---|
-| active loop (16k vocab, 512-token history, both detectors + logits pass) | 2,600–3,300 |
-| healthy (no continuation, 0 logits touched) | 100–200 |
+| active loop (16k vocab, 512-token history, both detectors + logits pass) | 2,600â€“3,300 |
+| healthy (no continuation, 0 logits touched) | 100â€“200 |
 
 Reproduce: `cargo run --release --bin unloop -- bench`. Portable builds without
 `target-cpu=native` run the exact scalar path, slower.
@@ -118,13 +115,13 @@ Reference head-to-head (deterministic 8-token-vocab mock, attractor from step 20
 
 | config | loop in tail | tokens to break | cumulative L1 damage |
 |---|---|---|---|
-| greedy | yes | — | 0 |
-| repetition penalty θ=1.2 | yes | — | 17.90 |
-| repetition penalty θ=1.5 | yes, relapses after 1 token | 1 | 25.45 |
+| greedy | yes | â€” | 0 |
+| repetition penalty Î¸=1.2 | yes | â€” | 17.90 |
+| repetition penalty Î¸=1.5 | yes, relapses after 1 token | 1 | 25.45 |
 | unloop (balanced) | no | 9 | 6.70 |
 
-θ=1.2 cannot break a loop whose runner-up is already in the history: dividing both
-logits by the same θ preserves their order. θ=1.5 escapes once, the escape token
+Î¸=1.2 cannot break a loop whose runner-up is already in the history: dividing both
+logits by the same Î¸ preserves their order. Î¸=1.5 escapes once, the escape token
 enters the history, is penalized too, and the attractor wins the step back. unloop
 holds: the escape route is not penalized, and each re-formed loop is damped again.
 
@@ -134,7 +131,7 @@ holds: the escape route is not penalized, and each re-formed loop is damped agai
 - 0 allocations per token, counting allocator over mount + healthy + intervention runs
 - schedule replays byte-exact from (preset, prompt profile)
 - fast top-two path equals the sequential reference over 4,000 adversarial cases
-  (duplicate maxima, ±0, ±inf, sorted, reversed, random)
+  (duplicate maxima, Â±0, Â±inf, sorted, reversed, random)
 - SHA-256 free; no network; no I/O in the library path
 
 ## Files
@@ -158,3 +155,4 @@ tests/        behavior, fuzz-equality, allocation proofs
 ## License
 
 MIT OR Apache-2.0.
+
