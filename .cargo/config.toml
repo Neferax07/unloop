@@ -1,0 +1,5 @@
+# unloop builds tuned for the host: the key-max reductions and detector scans
+# are integer loops that LLVM vectorizes only with AVX2 enabled. Portable
+# builds work correctly everywhere (pure scalar fallback), just slower.
+[build]
+rustflags = ["-C", "target-cpu=native"]

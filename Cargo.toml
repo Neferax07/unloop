@@ -1,0 +1,21 @@
+[package]
+name = "unloop"
+version = "0.1.0"
+edition = "2021"
+description = "Weight-free, deterministic repetition governor for LLM decoding — minimal-intervention loop breaking over a finite-ring phase governor"
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
+readme = "README.md"
+keywords = ["llm", "decoding", "repetition", "sampler", "no-std"]
+categories = ["no-std", "algorithms"]
+exclude = [".cargo", ".github", "PLAN.md"]
+
+[features]
+default = []
+ffi = []
+
+[dependencies]
+
+[profile.release]
+lto = true
+codegen-units = 1

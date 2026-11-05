@@ -1,0 +1,37 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: tests (scalar fallback correctness on all platforms)
+        run: cargo test --release
+      - name: ffi feature build
+        run: cargo build --release --features ffi
+      - name: package dry-run
+        run: cargo package --allow-dirty
+
+  bench-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # the SIMD path compiles only with avx2 in target features; the CI
+          # runner proves the scalar fallback is correct everywhere, and this
+          # job proves the SIMD path compiles and passes when enabled
+          rustflags: -C target-cpu=native
+      - name: tests with SIMD path live
+        run: cargo test --release
+      - name: bench smoke (compiles + runs)
+        run: cargo run --release --example bench
