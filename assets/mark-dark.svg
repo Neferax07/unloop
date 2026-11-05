@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="unloop mark">
+  <!-- unloop: nine-state ring, top node filled (the ground state) -->
+  <g stroke="#ffffff" stroke-width="5" fill="none">
+    <polygon points="50,12 75.7,21.4 89.4,45.1 84.6,72 63.7,89.6 36.3,89.6 15.4,72 10.6,45.1 24.3,21.4"/>
+    <circle cx="75.7" cy="21.4" r="7"/>
+    <circle cx="89.4" cy="45.1" r="7"/>
+    <circle cx="84.6" cy="72" r="7"/>
+    <circle cx="63.7" cy="89.6" r="7"/>
+    <circle cx="36.3" cy="89.6" r="7"/>
+    <circle cx="15.4" cy="72" r="7"/>
+    <circle cx="10.6" cy="45.1" r="7"/>
+    <circle cx="24.3" cy="21.4" r="7"/>
+  </g>
+  <circle cx="50" cy="12" r="8" fill="#ffffff"/>
+</svg>

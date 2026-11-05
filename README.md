@@ -1,8 +1,8 @@
 # unloop
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/mark-dark.png">
-  <img src="assets/mark.png" alt="unloop mark" width="160">
+  <source media="(prefers-color-scheme: dark)" srcset="assets/mark-dark.svg">
+  <img src="assets/mark.svg" alt="unloop mark: nine-state ring, top node filled" width="120">
 </picture>
 
 Repetition-loop governor for greedy LLM decoding. Detects the continuation token of a
