@@ -1,5 +1,10 @@
 # unloop
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/mark-dark.png">
+  <img src="assets/mark.png" alt="unloop mark" width="160">
+</picture>
+
 Repetition-loop governor for greedy LLM decoding. Detects the continuation token of a
 loop in the token history, demotes that single logit below the runner-up, schedules
 escalation on an affine state machine over Z9. No weights, no training, no
