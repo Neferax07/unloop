@@ -2,6 +2,22 @@
 
 All notable changes to unloop. Format: Keep a Changelog 1.1; semver.
 
+## [0.1.1] - 2026-11-05
+
+### Fixed
+
+- `unloop_review` no longer dereferences a null handle or a null buffer
+  paired with a nonzero length. Bad calls now return 3 (stop) and touch
+  nothing, the same contract `unloop_free` already had. The old behavior was
+  undefined; a correct caller could never trigger it, but the shim now
+  survives a wrong one too.
+- The density class argument of `unloop_new` is clamped to 1..=9.
+
+### Changed
+
+- The CI workflow runs with a read-only token and pins both GitHub actions
+  to commit hashes, so a moved tag cannot run code in this repo's name.
+
 ## [0.1.0] - 2026-11-05
 
 ### Added

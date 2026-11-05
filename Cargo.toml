@@ -1,6 +1,6 @@
 [package]
 name = "unloop"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Neferax"]
 description = "Weight-free, deterministic repetition governor for LLM decoding — minimal-intervention loop breaking over a finite-ring phase governor"
